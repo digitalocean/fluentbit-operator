@@ -1,0 +1,24 @@
+name: release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Docker Login
+      uses: docker/login-action@v1
+      with:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Build and push images
+      run: make image-push-operator latest=true release=true
