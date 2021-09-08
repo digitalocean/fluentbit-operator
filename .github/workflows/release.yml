@@ -21,4 +21,4 @@ jobs:
         DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
     
     - name: Build and push images
-      run: make image-push-operator latest=true release=true
+      run: make -f do.mk image-push-operator latest=true release=true
