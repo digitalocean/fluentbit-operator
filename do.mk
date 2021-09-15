@@ -1,9 +1,14 @@
-IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
+REV ?= $(shell git rev-parse --short HEAD)
+PREFIX ?= do-
+IMAGE_TAG ?= $(REV:$(PREFIX)%=%)
 
 ifdef release
-	REV ?= $(shell git rev-list --tags --max-count=1)
-	IMAGE_TAG = $(shell git describe --tags $(REV))
+	REV = $(shell git rev-list --tags --max-count=1)
+	GIT_TAG ?= $(shell git describe --tags $(REV))
+	IMAGE_TAG = $(GIT_TAG:$(PREFIX)%=%)
 endif
+
+$(info using image tag: $(IMAGE_TAG))
 
 .PHONY: image-operator
 image-operator:
