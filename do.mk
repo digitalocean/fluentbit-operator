@@ -2,6 +2,11 @@ IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
 FB_VERSION ?= 1.8.7
 
+ifdef release
+	REV = $(shell git rev-list --tags --max-count=1)
+	IMAGE_TAG = $(shell git describe --tags $(REV))
+endif
+
 $(info using image tag: $(IMAGE_TAG))
 
 .PHONY: image-operator
