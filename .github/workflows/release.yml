@@ -20,5 +20,8 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     
-    - name: Build and push images
+    - name: Build and push operator image
       run: make -f do.mk image-push-operator latest=true release=true
+
+    - name: Build and push fluent-bit image
+      run: make -f do.mk image-push-fluentbit latest=true release=true

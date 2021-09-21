@@ -1,3 +1,4 @@
+ARG FLUENTBIT_VERSION=2.1.11
 FROM golang:1.20.3-alpine3.16 as buildergo
 RUN mkdir -p /fluent-bit
 RUN mkdir -p /code
@@ -6,7 +7,7 @@ WORKDIR /code
 RUN echo $(ls -al /code)
 RUN CGO_ENABLED=0 go build -ldflags '-w -s' -o /fluent-bit/fluent-bit /code/cmd/fluent-watcher/fluentbit/main.go
 
-FROM fluent/fluent-bit:2.0.11
+FROM fluent/fluent-bit:${FLUENTBIT_VERSION}
 LABEL Description="Fluent Bit docker image" Vendor="Fluent" Version="1.0"
 
 COPY conf/fluent-bit.conf conf/parsers.conf /fluent-bit/etc/
