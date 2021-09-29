@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"kubesphere.io/fluentbit-operator/pkg/filenotify"
+	"kubesphere.io/fluentbit-operator/pkg/gziputil"
 )
 
 const (
@@ -23,6 +25,7 @@ const (
 	defaultCfgPath      = "/fluent-bit/etc/fluent-bit.conf"
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
+	decompressSuffix    = ".gzip.decompressed"
 
 	MaxDelayTime = 5 * time.Minute
 	ResetTime    = 10 * time.Minute
@@ -168,6 +171,11 @@ func newWatcher(poll bool, interval time.Duration) (filenotify.FileWatcher, erro
 
 // Inspired by https://github.com/jimmidyson/configmap-reload
 func isValidEvent(event fsnotify.Event) bool {
+	// ignore our decompress generated file
+	if strings.HasSuffix(event.Name, decompressSuffix) {
+		return false
+	}
+
 	return event.Op == fsnotify.Create || event.Op == fsnotify.Write
 }
 
@@ -180,7 +188,20 @@ func start() {
 		return
 	}
 
-	cmd = exec.Command(binPath, "-c", configPath)
+	configFilePath := configPath
+
+	if compressed, _ := gziputil.IsCompressed(configFilePath); compressed {
+		newConfig := configPath + decompressSuffix
+		if err := gziputil.Decompress(configFilePath, newConfig); err != nil {
+			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
+			cmd = nil
+			return
+		}
+
+		configFilePath = newConfig
+	}
+
+	cmd = exec.Command(binPath, "-c", configFilePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
