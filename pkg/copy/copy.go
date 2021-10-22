@@ -32,6 +32,11 @@ func CopyFilesWithFilter(sourceDir, destDir string,
 		if err != nil {
 			return err
 		}
+
+		destFi, err = os.Stat(destDir)
+		if err != nil {
+			return err
+		}
 	}
 
 	if !destFi.IsDir() {
