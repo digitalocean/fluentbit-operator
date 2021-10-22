@@ -96,9 +96,10 @@ func main() {
 	}
 
 	if err = (&controllers.FluentBitConfigReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
-		Scheme: mgr.GetScheme(),
+		Client:          mgr.GetClient(),
+		Log:             ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
+		Scheme:          mgr.GetScheme(),
+		UseCompresstion: useCompression,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "FluentBitConfig")
 		os.Exit(1)
