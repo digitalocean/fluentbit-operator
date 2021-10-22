@@ -22,7 +22,7 @@ func TestIsCompressed(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "compressed",
+			name:     "uncompressed",
 			input:    "testdata/fb.conf",
 			expected: false,
 		},
