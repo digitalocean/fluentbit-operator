@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"kubesphere.io/fluentbit-operator/pkg/copy"
 	"kubesphere.io/fluentbit-operator/pkg/filenotify"
 	"kubesphere.io/fluentbit-operator/pkg/gziputil"
 )
@@ -25,7 +28,9 @@ const (
 	defaultCfgPath      = "/fluent-bit/etc/fluent-bit.conf"
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
-	decompressSuffix    = ".gzip.decompressed"
+
+	scratchCfgPath = "/tmp/fluent-bit"
+	scratchCfgFile = "fluent-bit.scratch.conf"
 
 	MaxDelayTime = 5 * time.Minute
 	ResetTime    = 10 * time.Minute
@@ -177,11 +182,6 @@ func newWatcher(poll bool, interval time.Duration) (filenotify.FileWatcher, erro
 
 // Inspired by https://github.com/jimmidyson/configmap-reload
 func isValidEvent(event fsnotify.Event) bool {
-	// ignore our decompress generated file
-	if strings.HasSuffix(event.Name, decompressSuffix) {
-		return false
-	}
-
 	return event.Op == fsnotify.Create || event.Op == fsnotify.Write
 }
 
@@ -196,15 +196,32 @@ func start() {
 
 	configFilePath := configPath
 
-	if compressed, _ := gziputil.IsCompressed(configFilePath); compressed {
-		newConfig := configPath + decompressSuffix
+	compressed, err := gziputil.IsCompressed(configFilePath)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "checking "+configFilePath, "error", err)
+		return
+	}
+
+	if compressed {
+		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgPath, func(fi os.FileInfo) bool {
+			return strings.HasSuffix(fi.Name(), ".conf")
+		}); err != nil {
+			_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
+			return
+		}
+
+		newConfig := path.Join(scratchCfgPath, scratchCfgFile)
+
+		_ = level.Info(logger).Log("msg", fmt.Sprintf(" %s is compressed. Uncompressing to %s", configFilePath, newConfig))
+
 		if err := gziputil.Decompress(configFilePath, newConfig); err != nil {
 			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
-			cmd = nil
 			return
 		}
 
 		configFilePath = newConfig
+	} else {
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is not compressed.", configFilePath))
 	}
 
 	cmd = exec.Command(binPath, "-c", configFilePath)
