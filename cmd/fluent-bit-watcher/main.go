@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"path"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -27,8 +26,8 @@ const (
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
 
-	scratchCfgPath = "/tmp/fluent-bit"
-	scratchCfgFile = "fluent-bit.scratch.conf"
+	// uncompressed config in scratch space
+	scratchCfgPath = "/tmp/fluent-bit/fluent-bit.scratch.conf"
 
 	MaxDelayTime = 5 * time.Minute
 	ResetTime    = 10 * time.Minute
@@ -201,16 +200,14 @@ func start() {
 	}
 
 	if compressed {
-		newConfig := path.Join(scratchCfgPath, scratchCfgFile)
+		_ = level.Info(logger).Log("msg", fmt.Sprintf(" %s is compressed. Uncompressing to %s", configFilePath, scratchCfgPath))
 
-		_ = level.Info(logger).Log("msg", fmt.Sprintf(" %s is compressed. Uncompressing to %s", configFilePath, newConfig))
-
-		if err := gziputil.Decompress(configFilePath, newConfig); err != nil {
+		if err := gziputil.Decompress(configFilePath, scratchCfgPath); err != nil {
 			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
 			return
 		}
 
-		configFilePath = newConfig
+		configFilePath = scratchCfgPath
 	} else {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is not compressed.", configFilePath))
 	}
