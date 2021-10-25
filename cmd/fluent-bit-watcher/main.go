@@ -26,7 +26,7 @@ const (
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
 
-	// uncompressed config in scratch space
+	// decompressed config in scratch space
 	scratchCfgPath = "/tmp/fluent-bit/fluent-bit.scratch.conf"
 
 	MaxDelayTime = 5 * time.Minute
