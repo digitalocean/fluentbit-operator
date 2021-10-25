@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -18,7 +17,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	"kubesphere.io/fluentbit-operator/pkg/copy"
 	"kubesphere.io/fluentbit-operator/pkg/filenotify"
 	"kubesphere.io/fluentbit-operator/pkg/gziputil"
 )
@@ -203,13 +201,6 @@ func start() {
 	}
 
 	if compressed {
-		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgPath, func(fi os.FileInfo) bool {
-			return strings.HasSuffix(fi.Name(), ".conf")
-		}); err != nil {
-			_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
-			return
-		}
-
 		newConfig := path.Join(scratchCfgPath, scratchCfgFile)
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf(" %s is compressed. Uncompressing to %s", configFilePath, newConfig))
