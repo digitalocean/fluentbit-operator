@@ -38,9 +38,9 @@ import (
 // FluentBitConfigReconciler reconciles a FluentBitConfig object
 type FluentBitConfigReconciler struct {
 	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	UseCompresstion bool
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	UseCompression bool
 }
 
 // +kubebuilder:rbac:groups=logging.kubesphere.io,resources=fluentbitconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -112,7 +112,7 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		mainCfgData := []byte(mainCfg)
 
-		if r.UseCompresstion {
+		if r.UseCompression {
 			mainCfgData, err = gziputil.CompressBytes([]byte(mainCfg))
 			if err != nil {
 				return ctrl.Result{}, err
