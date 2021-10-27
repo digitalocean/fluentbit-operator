@@ -64,9 +64,12 @@ func CompressBytes(data []byte) ([]byte, error) {
 	if err != nil {
 		return []byte{}, err
 	}
+
 	if _, err = w.Write(data); err != nil {
 		return []byte{}, err
 	}
+	// cannot be deferred
+	// has to be flushed so we can call Bytes()
 	w.Close()
 
 	return buf.Bytes(), nil

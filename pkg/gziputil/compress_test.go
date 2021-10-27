@@ -55,3 +55,36 @@ func TestDecompress(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(actual).To(Equal(expected))
 }
+
+func TestCompress(t *testing.T) {
+
+	g := NewGomegaWithT(t)
+
+	newFile := "testdata/fb.conf.compress.test.gz"
+	decFile := "testdata/fb.de.compress.test.conf"
+
+	t.Cleanup(func() {
+		_ = os.Remove(newFile)
+		_ = os.Remove(decFile)
+	})
+
+	data, err := os.ReadFile("testdata/fb.conf")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	compressed, err := CompressBytes(data)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	err = os.WriteFile(newFile, compressed, 0644)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	isCompressed, err := IsCompressed(newFile)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(isCompressed).To(BeTrue())
+
+	err = Decompress(newFile, decFile)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	decompressed, err := os.ReadFile(decFile)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(decompressed).To(Equal(data))
+}
