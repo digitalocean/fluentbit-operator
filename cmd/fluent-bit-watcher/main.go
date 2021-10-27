@@ -200,21 +200,20 @@ func start() {
 	configFilePath := configPath
 	compressed := false
 
-	if isCustomConfigSet {
-		// if custom config file is used we should check that explicitly
-		compressed, err = gziputil.IsCompressed(configFilePath)
-	} else {
+	fileToCheck := configFilePath
+
+	if !isCustomConfigSet {
 		// if default is used we should check the fluent-bit.conf in watch dir (/fluent-bit/config/)
 		// default is /fluent-bit/etc/fluent-bit.conf
 		// which comes from Dockerfile which is copied from the conf source folder
 		// and all it does is @INCLUDE /fluent-bit/config/fluent-bit.conf
 
-		defaultConfigPath := path.Join(defaultWatchDir, "fluent-bit.conf")
-		compressed, err = gziputil.IsCompressed(defaultConfigPath)
+		fileToCheck = path.Join(defaultWatchDir, "fluent-bit.conf")
 	}
 
+	compressed, err = gziputil.IsCompressed(fileToCheck)
 	if err != nil {
-		_ = level.Error(logger).Log("msg", "checking "+configFilePath, "error", err)
+		_ = level.Error(logger).Log("msg", "checking "+fileToCheck, "error", err)
 		return
 	}
 
@@ -234,10 +233,10 @@ func start() {
 		// decompress
 		newConfig := path.Join(scratchCfgPath, scratchCfgFile)
 
-		_ = level.Info(logger).Log("msg", fmt.Sprintf(" %s is compressed. Uncompressing to %s", configFilePath, newConfig))
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is compressed. Decompressing to %s", fileToCheck, newConfig))
 
-		if err := gziputil.Decompress(configFilePath, newConfig); err != nil {
-			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
+		if err := gziputil.Decompress(fileToCheck, newConfig); err != nil {
+			_ = level.Error(logger).Log("msg", "decompress", "error", err)
 			return
 		}
 

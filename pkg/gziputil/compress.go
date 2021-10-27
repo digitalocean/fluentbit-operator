@@ -67,7 +67,7 @@ func CompressBytes(data []byte) ([]byte, error) {
 	if _, err = w.Write(data); err != nil {
 		return []byte{}, err
 	}
-	defer w.Close()
+	w.Close()
 
 	return buf.Bytes(), nil
 }
