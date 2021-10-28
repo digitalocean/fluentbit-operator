@@ -30,14 +30,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"kubesphere.io/fluentbit-operator/pkg/gziputil"
+
 	logging "kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2"
 )
 
 // FluentBitConfigReconciler reconciles a FluentBitConfig object
 type FluentBitConfigReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	UseCompression bool
 }
 
 // +kubebuilder:rbac:groups=logging.kubesphere.io,resources=fluentbitconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -107,6 +110,15 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
+		mainCfgData := []byte(mainCfg)
+
+		if r.UseCompression {
+			mainCfgData, err = gziputil.CompressBytes([]byte(mainCfg))
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		cl := plugins.NewConfigMapLoader(r.Client, cfg.Namespace)
 		scripts, err := cfg.RenderLuaScript(cl, filters)
 		if err != nil {
@@ -127,7 +139,7 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		if _, err := controllerutil.CreateOrPatch(ctx, r.Client, sec, func() error {
 			sec.Data = map[string][]byte{
-				"fluent-bit.conf": []byte(mainCfg),
+				"fluent-bit.conf": mainCfgData,
 				"parsers.conf":    []byte(parserCfg),
 			}
 			for _, s := range scripts {

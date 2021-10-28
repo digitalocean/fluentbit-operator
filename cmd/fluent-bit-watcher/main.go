@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -15,7 +18,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"kubesphere.io/fluentbit-operator/pkg/copy"
 	"kubesphere.io/fluentbit-operator/pkg/filenotify"
+	"kubesphere.io/fluentbit-operator/pkg/gziputil"
 )
 
 const (
@@ -23,6 +28,10 @@ const (
 	defaultCfgPath      = "/fluent-bit/etc/fluent-bit.conf"
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
+
+	// decompressed config in scratch space
+	scratchCfgDir  = "/tmp/fluent-bit"
+	scratchCfgFile = "fluent-bit.scratch.conf"
 
 	MaxDelayTime = 5 * time.Minute
 	ResetTime    = 10 * time.Minute
@@ -186,7 +195,63 @@ func start() {
 		return
 	}
 
-	cmd = exec.Command(binPath, "-c", configPath)
+	var err error
+
+	isCustomConfigSet := !(defaultCfgPath == configPath)
+	configFilePath := configPath
+	compressed := false
+
+	fileToCheck := configFilePath
+
+	if !isCustomConfigSet {
+		// if default is used we should check the fluent-bit.conf in watch dir (/fluent-bit/config/)
+		// default is /fluent-bit/etc/fluent-bit.conf
+		// which comes from Dockerfile which is copied from the conf source folder
+		// and all it does is @INCLUDE /fluent-bit/config/fluent-bit.conf
+
+		fileToCheck = filepath.Join(defaultWatchDir, "fluent-bit.conf")
+	}
+
+	compressed, err = gziputil.IsCompressed(fileToCheck)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "checking "+fileToCheck, "error", err)
+		return
+	}
+
+	if compressed {
+		// there may be references in service config to local relative files (ie parsers.conf)
+		// we should copy all to scratch space first
+		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgDir, copyFilterfunc); err != nil {
+			_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
+			return
+		}
+
+		if isCustomConfigSet {
+			// if custom config used, also copy files in folder of custom config
+			baseDir := filepath.Dir(fileToCheck)
+			if err := copy.CopyFilesWithFilter(baseDir, scratchCfgDir, copyFilterfunc); err != nil {
+				_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
+				return
+			}
+		}
+
+		// decompress
+		newConfig := filepath.Join(scratchCfgDir, scratchCfgFile)
+
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is compressed. Decompressing to %s", fileToCheck, newConfig))
+
+		if err := gziputil.Decompress(fileToCheck, newConfig); err != nil {
+			_ = level.Error(logger).Log("msg", "decompress", "error", err)
+			return
+		}
+
+		// finally set it
+		configFilePath = newConfig
+	} else {
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is not compressed.", configFilePath))
+	}
+
+	cmd = exec.Command(binPath, "-c", configFilePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -271,4 +336,11 @@ func stop() {
 func resetTimer() {
 	timerCancel()
 	atomic.StoreInt32(&restartTimes, 0)
+}
+
+func copyFilterfunc(fi os.FileInfo) bool {
+	return strings.HasSuffix(fi.Name(), ".conf") ||
+		strings.HasSuffix(fi.Name(), ".lua") ||
+		strings.HasSuffix(fi.Name(), ".yaml") ||
+		strings.HasSuffix(fi.Name(), ".yml")
 }
