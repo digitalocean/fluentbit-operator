@@ -30,7 +30,7 @@ const (
 	defaultPollInterval = 1 * time.Second
 
 	// decompressed config in scratch space
-	scratchCfgPath = "/tmp/fluent-bit"
+	scratchCfgDir  = "/tmp/fluent-bit"
 	scratchCfgFile = "fluent-bit.scratch.conf"
 
 	MaxDelayTime = 5 * time.Minute
@@ -215,7 +215,7 @@ func start() {
 	if compressed {
 		// there may be references in service config to local relative files (ie parsers.conf)
 		// we should copy all to scratch space first
-		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgPath, copyFilterfunc); err != nil {
+		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgDir, copyFilterfunc); err != nil {
 			_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
 			return
 		}
@@ -223,14 +223,14 @@ func start() {
 		if isCustomConfigSet {
 			// if custom config used, also copy files in folder of custom config
 			baseDir := filepath.Dir(fileToCheck)
-			if err := copy.CopyFilesWithFilter(baseDir, scratchCfgPath, copyFilterfunc); err != nil {
+			if err := copy.CopyFilesWithFilter(baseDir, scratchCfgDir, copyFilterfunc); err != nil {
 				_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
 				return
 			}
 		}
 
 		// decompress
-		newConfig := filepath.Join(scratchCfgPath, scratchCfgFile)
+		newConfig := filepath.Join(scratchCfgDir, scratchCfgFile)
 
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is compressed. Decompressing to %s", fileToCheck, newConfig))
 
@@ -240,7 +240,7 @@ func start() {
 		}
 
 		// finally set it
-		configFilePath = scratchCfgPath
+		configFilePath = newConfig
 	} else {
 		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is not compressed.", configFilePath))
 	}
