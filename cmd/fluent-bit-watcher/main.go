@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,7 +20,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"kubesphere.io/fluentbit-operator/pkg/copy"
 	"kubesphere.io/fluentbit-operator/pkg/filenotify"
+	"kubesphere.io/fluentbit-operator/pkg/gziputil"
 )
 
 const (
@@ -27,6 +31,11 @@ const (
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
 
+	// decompressed config in scratch space
+	scratchCfgDir  = "/tmp/fluent-bit"
+	scratchCfgFile = "fluent-bit.scratch.conf"
+
+	// shutdown delay error detection
 	defaultShutdownDelayInterval  = 5 * time.Minute
 	defaultShutdownDelayThreshold = 3
 
@@ -48,6 +57,7 @@ var configPath string
 var binPath string
 var watchPath string
 var poll bool
+var exitOnFailure bool
 var pollInterval time.Duration
 var watchShutdownDelay bool
 var watchShutdownDelayInterval time.Duration
@@ -57,6 +67,7 @@ func main() {
 
 	flag.StringVar(&binPath, "b", defaultBinPath, "The fluent bit binary path.")
 	flag.StringVar(&configPath, "c", defaultCfgPath, "The config file path.")
+	flag.BoolVar(&exitOnFailure, "exit-on-failure", false, "If fluentbit exits with failure, also exit the watcher.")
 	flag.StringVar(&watchPath, "watch-path", defaultWatchDir, "The path to watch.")
 	flag.BoolVar(&poll, "poll", false, "Use poll watcher instead of ionotify.")
 	flag.DurationVar(&pollInterval, "poll-interval", defaultPollInterval, "Poll interval if using poll watcher.")
@@ -91,7 +102,11 @@ func main() {
 					// Start fluent bit if it does not existed.
 					start()
 					// Wait for the fluent bit exit.
-					wait()
+					err := wait()
+					if exitOnFailure && err != nil {
+						_ = level.Error(logger).Log("msg", "Fluent bit exited with error; exiting watcher")
+						return err
+					}
 
 					timerCtx, timerCancel = context.WithCancel(context.Background())
 
@@ -221,7 +236,63 @@ func start() {
 		return
 	}
 
-	cmd = exec.Command(binPath, "-c", configPath)
+	var err error
+
+	isCustomConfigSet := !(defaultCfgPath == configPath)
+	configFilePath := configPath
+	compressed := false
+
+	fileToCheck := configFilePath
+
+	if !isCustomConfigSet {
+		// if default is used we should check the fluent-bit.conf in watch dir (/fluent-bit/config/)
+		// default is /fluent-bit/etc/fluent-bit.conf
+		// which comes from Dockerfile which is copied from the conf source folder
+		// and all it does is @INCLUDE /fluent-bit/config/fluent-bit.conf
+
+		fileToCheck = filepath.Join(defaultWatchDir, "fluent-bit.conf")
+	}
+
+	compressed, err = gziputil.IsCompressed(fileToCheck)
+	if err != nil {
+		_ = level.Error(logger).Log("msg", "checking "+fileToCheck, "error", err)
+		return
+	}
+
+	if compressed {
+		// there may be references in service config to local relative files (ie parsers.conf)
+		// we should copy all to scratch space first
+		if err := copy.CopyFilesWithFilter("/fluent-bit/etc/", scratchCfgDir, copyFilterfunc); err != nil {
+			_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
+			return
+		}
+
+		if isCustomConfigSet {
+			// if custom config used, also copy files in folder of custom config
+			baseDir := filepath.Dir(fileToCheck)
+			if err := copy.CopyFilesWithFilter(baseDir, scratchCfgDir, copyFilterfunc); err != nil {
+				_ = level.Error(logger).Log("msg", "copying parsers config file", "error", err)
+				return
+			}
+		}
+
+		// decompress
+		newConfig := filepath.Join(scratchCfgDir, scratchCfgFile)
+
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is compressed. Decompressing to %s", fileToCheck, newConfig))
+
+		if err := gziputil.Decompress(fileToCheck, newConfig); err != nil {
+			_ = level.Error(logger).Log("msg", "decompress", "error", err)
+			return
+		}
+
+		// finally set it
+		configFilePath = newConfig
+	} else {
+		_ = level.Info(logger).Log("msg", fmt.Sprintf("%s is not compressed.", configFilePath))
+	}
+
+	cmd = exec.Command(binPath, "-c", configFilePath)
 
 	if watchShutdownDelay {
 		stdOutPipe, err := cmd.StdoutPipe()
@@ -248,25 +319,20 @@ func start() {
 		cmd.Stderr = os.Stderr
 	}
 
-	if err := cmd.Start(); err != nil {
-		_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
-		cmd = nil
-		return
-	}
-
 	_ = level.Info(logger).Log("msg", "Fluent bit started")
 }
 
-func wait() {
+func wait() error {
 	mutex.Lock()
 	if cmd == nil {
 		mutex.Unlock()
-		return
+		return nil
 	}
 	mutex.Unlock()
 
 	startTime := time.Now()
-	_ = level.Error(logger).Log("msg", "Fluent bit exited", "error", cmd.Wait())
+	err := cmd.Wait()
+	_ = level.Error(logger).Log("msg", "Fluent bit exited", "error", err)
 	// Once the fluent bit has executed for 10 minutes without any problems,
 	// it should resets the restart backoff timer.
 	if time.Since(startTime) >= ResetTime {
@@ -276,6 +342,7 @@ func wait() {
 	mutex.Lock()
 	cmd = nil
 	mutex.Unlock()
+	return err
 }
 
 func backoff() {
@@ -330,6 +397,13 @@ func stop() {
 func resetTimer() {
 	timerCancel()
 	atomic.StoreInt32(&restartTimes, 0)
+}
+
+func copyFilterfunc(fi os.FileInfo) bool {
+	return strings.HasSuffix(fi.Name(), ".conf") ||
+		strings.HasSuffix(fi.Name(), ".lua") ||
+		strings.HasSuffix(fi.Name(), ".yaml") ||
+		strings.HasSuffix(fi.Name(), ".yml")
 }
 
 func readCmd(r io.Reader) {

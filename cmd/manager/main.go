@@ -52,11 +52,15 @@ func main() {
 	var metricsAddr string
 	var watchNamespaces string
 	var enableLeaderElection bool
+	var useCompression bool
 	var logPath string
+
 	flag.StringVar(&watchNamespaces, "watch-namespaces", "", "Optional comma separated list of namespaces to watch for resources in. Defaults to cluster scope.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&useCompression, "use-compression", false,
+		"Use gzip compression for fluent bit config file data in secrets.")
 	flag.Parse()
 
 	if envs, err := godotenv.Read("/fluentbit-operator/fluent-bit.env"); err == nil {
@@ -92,9 +96,10 @@ func main() {
 	}
 
 	if err = (&controllers.FluentBitConfigReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Log:            ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
+		Scheme:         mgr.GetScheme(),
+		UseCompression: useCompression,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "FluentBitConfig")
 		os.Exit(1)

@@ -149,6 +149,12 @@ func MakeDaemonSet(fb v1alpha2.FluentBit, logPath string) appsv1.DaemonSet {
 								},
 							},
 						},
+						{
+							Name: "scratch",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 					},
 					Containers: []corev1.Container{
 						{
@@ -164,7 +170,7 @@ func MakeDaemonSet(fb v1alpha2.FluentBit, logPath string) appsv1.DaemonSet {
 								},
 							},
 							Env: []corev1.EnvVar{
-								corev1.EnvVar{
+								{
 									Name: "NODE_NAME",
 									ValueFrom: &corev1.EnvVarSource{
 										FieldRef: &corev1.ObjectFieldSelector{
@@ -194,6 +200,11 @@ func MakeDaemonSet(fb v1alpha2.FluentBit, logPath string) appsv1.DaemonSet {
 									ReadOnly:  true,
 									MountPath: "/var/log/journal",
 								},
+								{
+									Name:      "scratch",
+									ReadOnly:  false,
+									MountPath: "/tmp/fluent-bit",
+								},
 							},
 							Resources: fb.Spec.Resources,
 						},
@@ -208,6 +219,10 @@ func MakeDaemonSet(fb v1alpha2.FluentBit, logPath string) appsv1.DaemonSet {
 
 	if fb.Spec.RuntimeClassName != "" {
 		ds.Spec.Template.Spec.RuntimeClassName = &fb.Spec.RuntimeClassName
+	}
+
+	if fb.Spec.PriorityClassName != "" {
+		ds.Spec.Template.Spec.PriorityClassName = fb.Spec.PriorityClassName
 	}
 
 	// Mount Position DB
