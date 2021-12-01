@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"io"
 	"math"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -24,6 +27,9 @@ const (
 	defaultWatchDir     = "/fluent-bit/config"
 	defaultPollInterval = 1 * time.Second
 
+	defaultShutdownDelayInterval  = 5 * time.Minute
+	defaultShutdownDelayThreshold = 3
+
 	MaxDelayTime = 5 * time.Minute
 	ResetTime    = 10 * time.Minute
 )
@@ -35,6 +41,7 @@ var (
 	restartTimes int32
 	timerCtx     context.Context
 	timerCancel  context.CancelFunc
+	errCounter   uint32
 )
 
 var configPath string
@@ -42,6 +49,9 @@ var binPath string
 var watchPath string
 var poll bool
 var pollInterval time.Duration
+var watchShutdownDelay bool
+var watchShutdownDelayInterval time.Duration
+var watchShutdownDelayThreshold uint
 
 func main() {
 
@@ -50,6 +60,9 @@ func main() {
 	flag.StringVar(&watchPath, "watch-path", defaultWatchDir, "The path to watch.")
 	flag.BoolVar(&poll, "poll", false, "Use poll watcher instead of ionotify.")
 	flag.DurationVar(&pollInterval, "poll-interval", defaultPollInterval, "Poll interval if using poll watcher.")
+	flag.BoolVar(&watchShutdownDelay, "watch-shutdown-delay", false, "Watch for shutdown delayed errors and force restart.")
+	flag.DurationVar(&watchShutdownDelayInterval, "watch-shutdown-delay-interval", defaultShutdownDelayInterval, "Watch for shutdown delayed errors interfaval check.")
+	flag.UintVar(&watchShutdownDelayThreshold, "watch-shutdown-delay-threshold", defaultShutdownDelayThreshold, "Watch for shutdown delayed errors check threshold.")
 
 	flag.Parse()
 
@@ -141,6 +154,34 @@ func main() {
 			},
 		)
 	}
+	{
+		if watchShutdownDelay {
+			// goroutine to check for error condition
+			ticker := time.NewTicker(watchShutdownDelayInterval)
+			cancel := make(chan struct{})
+			g.Add(
+				func() error {
+					_ = level.Info(logger).Log("msg", "starting checker")
+					for {
+						select {
+						case <-cancel:
+							return nil
+						case <-ticker.C:
+							if atomic.LoadUint32(&errCounter) > uint32(watchShutdownDelayThreshold) {
+								_ = level.Warn(logger).Log("msg", "Force shutdown due to shutdown error condition", "counter", atomic.LoadUint32(&errCounter))
+
+								stop()
+								resetTimer()
+							}
+						}
+					}
+				},
+				func(err error) {
+					close(cancel)
+				},
+			)
+		}
+	}
 
 	if err := g.Run(); err != nil {
 		_ = level.Error(logger).Log("err", err)
@@ -181,8 +222,32 @@ func start() {
 	}
 
 	cmd = exec.Command(binPath, "-c", configPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	if watchShutdownDelay {
+		stdOutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
+			cmd = nil
+			return
+		}
+
+		stdErrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
+			cmd = nil
+			return
+		}
+
+		teeStdout := io.TeeReader(stdOutPipe, os.Stdout)
+		teeStderr := io.TeeReader(stdErrPipe, os.Stderr)
+		cmdReader := io.MultiReader(teeStdout, teeStderr)
+
+		go readCmd(cmdReader)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
 	if err := cmd.Start(); err != nil {
 		_ = level.Error(logger).Log("msg", "start Fluent bit error", "error", err)
 		cmd = nil
@@ -258,9 +323,24 @@ func stop() {
 	} else {
 		_ = level.Info(logger).Log("msg", "Killed Fluent Bit")
 	}
+
+	atomic.StoreUint32(&errCounter, 0)
 }
 
 func resetTimer() {
 	timerCancel()
 	atomic.StoreInt32(&restartTimes, 0)
+}
+
+func readCmd(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		text := scanner.Text()
+		if strings.Contains(text, "shutdown delayed") {
+			atomic.AddUint32(&errCounter, 1)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		atomic.StoreUint32(&errCounter, 0)
+	}
 }
