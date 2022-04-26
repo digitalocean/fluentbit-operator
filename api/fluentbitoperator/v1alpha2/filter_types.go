@@ -58,6 +58,8 @@ type FilterItem struct {
 	Lua *filter.Lua `json:"lua,omitempty"`
 	// Throttle defines a Throttle configuration.
 	Throttle *filter.Throttle `json:"throttle,omitempty"`
+	// RewriteTag defines a RewriteTag configuration.
+	RewriteTag *filter.RewriteTag `json:"rewriteTag,omitempty"`
 }
 
 // +kubebuilder:object:root=true
