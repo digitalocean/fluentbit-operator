@@ -398,6 +398,33 @@ spec:
                             type: string
                           type: array
                       type: object
+                    rewriteTag:
+                      description: RewriteTag defines a RewriteTag configuration.
+                      properties:
+                        emitterMemoryBufferLimit:
+                          description: Set a limit on the amount of memory the tag
+                            rewrite emitter can consume if the outputs provide backpressure.
+                          type: string
+                        emitterName:
+                          description: When the filter emits a record under the new
+                            Tag, there is an internal emitter plugin that takes care
+                            of the job. Since this emitter expose metrics as any other
+                            component of the pipeline, you can use this property to
+                            configure an optional name for it.
+                          type: string
+                        emitterStorageType:
+                          description: Define a buffering mechanism for the new records
+                            created. Note these records are part of the emitter plugin.
+                            This option support the values "memory" (default) or "filesystem".
+                          type: string
+                        rules:
+                          description: 'Defines the matching criteria and the format
+                            of the Tag for the matching record. The Rule format have
+                            four components: KEY REGEX NEW_TAG KEEP.'
+                          items:
+                            type: string
+                          type: array
+                      type: object
                     throttle:
                       description: Throttle defines a Throttle configuration.
                       properties:
