@@ -1,6 +1,6 @@
 VERSION?=$(shell cat VERSION | tr -d " \t\n\r")
 # Image URL to use all building/pushing image targets
-FB_IMG ?= kubesphere/fluent-bit:v1.8.3
+FB_IMG ?= kubesphere/fluent-bit:2.1.1
 OP_IMG ?= kubesphere/fluentbit-operator:$(VERSION)
 AMD64 ?= -amd64
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
