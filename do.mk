@@ -1,6 +1,6 @@
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
-FB_VERSION ?= 2.1.1
+FB_VERSION ?= 1.8.12
 
 ifdef release
 	REV = $(shell git rev-list --tags --max-count=1)
