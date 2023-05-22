@@ -79,6 +79,12 @@ func MakeDaemonSet(fb fluentbitv1alpha2.FluentBit, logPath string) *appsv1.Daemo
 								},
 							},
 						},
+						{
+							Name: "scratch",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 					},
 					InitContainers: fb.Spec.InitContainers,
 					Containers: []corev1.Container{
@@ -133,6 +139,11 @@ func MakeDaemonSet(fb fluentbitv1alpha2.FluentBit, logPath string) *appsv1.Daemo
 									Name:      "systemd",
 									ReadOnly:  true,
 									MountPath: "/var/log/journal",
+								},
+								{
+									Name:      "scratch",
+									ReadOnly:  false,
+									MountPath: "/tmp/fluent-bit",
 								},
 							},
 							Resources: fb.Spec.Resources,

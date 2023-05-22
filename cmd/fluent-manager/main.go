@@ -66,6 +66,7 @@ func main() {
 	var watchNamespaces string
 	var logPath string
 	var disabledControllers string
+	var useCompression bool
 	flag.StringVar(&watchNamespaces, "watch-namespaces", "", "Optional comma separated list of namespaces to watch for resources in. Defaults to cluster scope.")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -75,6 +76,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&useCompression, "use-compression", false,
+		"Use gzip compression for fluent bit config file data in secrets.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -125,9 +128,10 @@ func main() {
 	if fluentBitEnabled {
 		utilruntime.Must(fluentbitv1alpha2.AddToScheme(scheme))
 		if err = (&controllers.FluentBitConfigReconciler{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
-			Scheme: mgr.GetScheme(),
+			Client:         mgr.GetClient(),
+			Log:            ctrl.Log.WithName("controllers").WithName("FluentBitConfig"),
+			Scheme:         mgr.GetScheme(),
+			UseCompression: useCompression,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "FluentBitConfig")
 			os.Exit(1)

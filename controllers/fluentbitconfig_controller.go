@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/fluent/fluent-operator/v2/apis/fluentbit/v1alpha2/plugins"
+	"github.com/fluent/fluent-operator/v2/pkg/gziputil"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -31,12 +32,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"strings"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"strings"
 
 	fluentbitv1alpha2 "github.com/fluent/fluent-operator/v2/apis/fluentbit/v1alpha2"
 )
@@ -44,8 +46,9 @@ import (
 // FluentBitConfigReconciler reconciles a FluentBitConfig object
 type FluentBitConfigReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	UseCompression bool
 }
 
 // +kubebuilder:rbac:groups=fluentbit.fluent.io,resources=clusterfluentbitconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -142,10 +145,19 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			}
 			// Inject config data into Secret
 			sl := plugins.NewSecretLoader(r.Client, ns)
-			mainAppCfg, err := cfg.RenderMainConfig(sl, inputs, filters, outputs, nsFilterLists, nsOutputLists, rewriteTagConfigs)
+			mainCfg, err := cfg.RenderMainConfig(sl, inputs, filters, outputs, nsFilterLists, nsOutputLists, rewriteTagConfigs)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
+
+			mainAppCfg := []byte(mainCfg)
+			if r.UseCompression {
+				mainAppCfg, err = gziputil.CompressBytes([]byte(mainCfg))
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+
 			parserCfg, err := cfg.RenderParserConfig(sl, parsers, nsParserLists, nsClusterParserLists)
 			if err != nil {
 				return ctrl.Result{}, err
@@ -171,7 +183,7 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 			if _, err := controllerutil.CreateOrPatch(ctx, r.Client, sec, func() error {
 				sec.Data = map[string][]byte{
-					"fluent-bit.conf": []byte(mainAppCfg),
+					"fluent-bit.conf": mainAppCfg,
 					"parsers.conf":    []byte(parserCfg),
 				}
 				for _, s := range scripts {
