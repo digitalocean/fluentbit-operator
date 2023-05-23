@@ -1,6 +1,6 @@
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
-FB_VERSION ?= 2.1.11
+FB_VERSION ?= 2.1.1
 
 ifdef release
 	REV = $(shell git rev-list --tags --max-count=1)
@@ -11,7 +11,7 @@ $(info using image tag: $(IMAGE_TAG))
 
 .PHONY: image-operator
 image-operator:
-	docker build -f cmd/manager/Dockerfile -t digitaloceanapps/fluent-bit-operator:$(IMAGE_TAG) .
+	docker build -f cmd/fluent-manager/Dockerfile -t digitaloceanapps/fluent-bit-operator:$(IMAGE_TAG) .
 ifdef latest
 	docker tag digitaloceanapps/fluent-bit-operator:$(IMAGE_TAG) digitaloceanapps/fluent-bit-operator:latest
 endif
@@ -25,7 +25,7 @@ endif
 
 .PHONY: image-fluentbit
 image-fluentbit:
-	docker build --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-bit-watcher/Dockerfile -t digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
+	docker build --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-watcher/fluentbit/Dockerfile -t digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
 ifdef latest
 	docker tag digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) digitaloceanapps/fluent-bit:latest
 endif

@@ -1,4 +1,4 @@
-ARG FLUENTBIT_VERSION=2.1.11
+ARG FLUENTBIT_VERSION=2.1.1
 FROM golang:1.20.3-alpine3.16 as buildergo
 RUN mkdir -p /fluent-bit
 RUN mkdir -p /code
