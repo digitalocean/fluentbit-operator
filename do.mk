@@ -1,6 +1,6 @@
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 
-FB_VERSION ?= 1.8.12
+FB_VERSION ?= 2.2.2
 
 ifdef release
 	REV = $(shell git rev-list --tags --max-count=1)
@@ -25,7 +25,7 @@ endif
 
 .PHONY: image-fluentbit
 image-fluentbit:
-	docker build --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-bit-watcher/Dockerfile -t digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
+	docker build --platform linux/amd64 --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-bit-watcher/Dockerfile -t digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
 ifdef latest
 	docker tag digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) digitaloceanapps/fluent-bit:latest
 endif
