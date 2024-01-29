@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	fluentbitv1alpha2 "kubesphere.io/fluentbit-operator/api/fluentbit/v1alpha2"
+	newplugins "kubesphere.io/fluentbit-operator/api/fluentbit/v1alpha2/plugins"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,6 +71,11 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
+		var clusterInputs fluentbitv1alpha2.ClusterInputList
+		if err = r.List(ctx, &clusterInputs, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		// List all filters matching the label selector.
 		var filters logging.FilterList
 		selector, err = metav1.LabelSelectorAsSelector(&cfg.Spec.FilterSelector)
@@ -79,6 +86,11 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
+		var clusterFilters fluentbitv1alpha2.ClusterFilterList
+		if err = r.List(ctx, &clusterFilters, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		// List all outputs matching the label selector.
 		var outputs logging.OutputList
 		selector, err = metav1.LabelSelectorAsSelector(&cfg.Spec.OutputSelector)
@@ -86,6 +98,11 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 		if err = r.List(ctx, &outputs, client.InNamespace(req.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		var clusterOutputs fluentbitv1alpha2.ClusterOutputList
+		if err = r.List(ctx, &clusterOutputs, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -101,19 +118,26 @@ func (r *FluentBitConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		// Inject config data into Secret
 		sl := plugins.NewSecretLoader(r.Client, cfg.Namespace, r.Log)
-		mainCfg, err := cfg.RenderMainConfig(sl, inputs, filters, outputs)
+		oldMainCfg, err := cfg.RenderMainConfig(sl, inputs, filters, outputs)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Render a config based on the new types as well.
+		newMainCfg, err := (&fluentbitv1alpha2.ClusterFluentBitConfig{}).RenderMainConfig(newplugins.NewSecretLoader(r.Client, cfg.Namespace), clusterInputs, clusterFilters, clusterOutputs, nil, nil, nil)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		parserCfg, err := cfg.RenderParserConfig(sl, parsers)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		mainCfgData := []byte(mainCfg)
+		mainCfgData := []byte(oldMainCfg + newMainCfg)
 
 		if r.UseCompression {
-			mainCfgData, err = gziputil.CompressBytes([]byte(mainCfg))
+			mainCfgData, err = gziputil.CompressBytes([]byte(oldMainCfg + newMainCfg))
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -181,6 +205,9 @@ func (r *FluentBitConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &logging.Input{}}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &logging.Filter{}}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &logging.Output{}}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &fluentbitv1alpha2.ClusterInput{}}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &fluentbitv1alpha2.ClusterFilter{}}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &fluentbitv1alpha2.ClusterOutput{}}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &logging.Parser{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
