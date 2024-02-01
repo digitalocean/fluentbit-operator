@@ -2,11 +2,11 @@ package filter
 
 import (
 	"strconv"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins/params"
-	"kubesphere.io/fluentbit-operator/pkg/utils"
 )
 
 // +kubebuilder:object:generate:=true
@@ -45,7 +45,7 @@ func (l *Lua) Params(_ plugins.SecretLoader) (*params.KVs, error) {
 	kvs.Insert("call", l.Call)
 
 	if l.TypeIntKey != nil && len(l.TypeIntKey) > 0 {
-		kvs.Insert("type_int_key", utils.ConcatString(l.TypeIntKey, " "))
+		kvs.Insert("type_int_key", strings.Join(l.TypeIntKey, " "))
 	}
 
 	if l.ProtectedMode != nil {

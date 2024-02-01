@@ -2,10 +2,10 @@ package output
 
 import (
 	"fmt"
+	"strings"
 
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins/params"
-	"kubesphere.io/fluentbit-operator/pkg/utils"
 )
 
 // +kubebuilder:object:generate:=true
@@ -79,10 +79,10 @@ func (l *Loki) Params(sl plugins.SecretLoader) (*params.KVs, error) {
 		kvs.Insert("tenant_id", id)
 	}
 	if l.Labels != nil && len(l.Labels) > 0 {
-		kvs.Insert("labels", utils.ConcatString(l.Labels, ","))
+		kvs.Insert("labels", strings.Join(l.Labels, ","))
 	}
 	if l.LabelKeys != nil && len(l.LabelKeys) > 0 {
-		kvs.Insert("label_keys", utils.ConcatString(l.LabelKeys, ","))
+		kvs.Insert("label_keys", strings.Join(l.LabelKeys, ","))
 	}
 	if l.LineFormat != "" {
 		kvs.Insert("line_format", l.LineFormat)
