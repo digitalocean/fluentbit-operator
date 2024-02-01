@@ -1,18 +1,22 @@
-ARG FLUENTBIT_VERSION=1.8.3
+ARG FLUENTBIT_VERSION=2.2.2
 
-FROM golang:1.13.6-alpine3.11 as buildergo
-RUN mkdir -p /fluent-bit
-RUN mkdir -p /code
-COPY . /code/
-WORKDIR /code
-RUN echo $(ls -al /code)
-RUN CGO_ENABLED=0 go build -i -ldflags '-w -s' -o /fluent-bit/fluent-bit /code/cmd/fluent-bit-watcher/main.go
+FROM golang:1.21 as builder
+
+WORKDIR /go/src/app
+
+# Download modules first to allow for efficient cache usage.
+COPY go.mod go.sum .
+RUN go mod download
+
+COPY cmd ./cmd
+COPY api ./api
+RUN CGO_ENABLED=0 go build -o /tmp/fluent-bit-watcher ./cmd/fluent-bit-watcher/...
 
 FROM fluent/fluent-bit:${FLUENTBIT_VERSION}
-LABEL Description="Fluent Bit docker image" Vendor="KubeSphere" Version="1.0"
 
 COPY conf/fluent-bit.conf conf/parsers.conf /fluent-bit/etc/
-COPY --from=buildergo /fluent-bit/fluent-bit /fluent-bit/bin/fluent-bit-watcher
+COPY conf/startup.conf /fluent-bit/config/fluent-bit.conf
+COPY --from=builder /tmp/fluent-bit-watcher /fluent-bit/bin/fluent-bit-watcher
 
 # Entry point
 ENTRYPOINT ["/fluent-bit/bin/fluent-bit-watcher"]

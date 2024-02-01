@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: new-fluentbit
+  namespace: apps-external-log
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name:  new-fluentbit
+  namespace: apps-external-log
+rules:
+- apiGroups:
+  - logging.kubesphere.io
+  resources:
+  - inputs
+  - filters
+  - outputs
+  - parsers
+  verbs:
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name:  new-fluentbit
+  namespace: apps-external-log
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: new-fluentbit
+subjects:
+- kind: ServiceAccount
+  name: new-fluentbit
+  namespace: apps-external-log
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: new-fluentbit
+  namespace: apps-external-log
+spec:
+  selector:
+    matchLabels:
+      app: new-fluentbit
+      apps-infra: "true"
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: new-fluentbit
+        apps-infra: "true"
+      name: new-fluentbit
+      namespace: apps-external-log
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: apps.digitalocean.com/node-class
+                operator: In
+                values:
+                - app-workload
+      containers:
+      - env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: markusthoemmes/fluent-bit:2.2.2-0dacfc2
+        imagePullPolicy: Always
+        name: fluent-bit
+        ports:
+        - containerPort: 2020
+          name: metrics
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 250m
+            memory: 500Mi
+          requests:
+            cpu: 25m
+            memory: 50Mi
+        volumeMounts:
+        - mountPath: /var/log/
+          name: varlogs
+          readOnly: true
+        - mountPath: /fluent-bit/tail
+          name: positions
+      priorityClassName: system-cluster-critical
+      runtimeClassName: gvisor-ptrace-vfs2
+      serviceAccountName: new-fluentbit
+      tolerations:
+      - effect: NoExecute
+        key: apps.digitalocean.com/dedicate
+        operator: Equal
+        value: app-workload
+      - effect: NoExecute
+        key: apps.digitalocean.com/workload-class
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /var/log
+          type: ""
+        name: varlogs
+      - hostPath:
+          path: /var/lib/fluent-bit/
+          type: DirectoryOrCreate
+        name: positions
