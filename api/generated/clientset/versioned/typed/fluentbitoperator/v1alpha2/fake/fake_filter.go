@@ -21,7 +21,6 @@ import (
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -34,9 +33,9 @@ type FakeFilters struct {
 	ns   string
 }
 
-var filtersResource = schema.GroupVersionResource{Group: "logging.kubesphere.io", Version: "v1alpha2", Resource: "filters"}
+var filtersResource = v1alpha2.SchemeGroupVersion.WithResource("filters")
 
-var filtersKind = schema.GroupVersionKind{Group: "logging.kubesphere.io", Version: "v1alpha2", Kind: "Filter"}
+var filtersKind = v1alpha2.SchemeGroupVersion.WithKind("Filter")
 
 // Get takes name of the filter, and returns the corresponding filter object, and an error if there is any.
 func (c *FakeFilters) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha2.Filter, err error) {
@@ -103,7 +102,7 @@ func (c *FakeFilters) Update(ctx context.Context, filter *v1alpha2.Filter, opts 
 // Delete takes name of the filter and deletes it. Returns an error if one occurs.
 func (c *FakeFilters) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(filtersResource, c.ns, name), &v1alpha2.Filter{})
+		Invokes(testing.NewDeleteActionWithOptions(filtersResource, c.ns, name, opts), &v1alpha2.Filter{})
 
 	return err
 }

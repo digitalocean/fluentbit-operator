@@ -9,7 +9,7 @@ set -o pipefail
 SCRIPT_ROOT=$(git rev-parse --show-toplevel)
 
 # Grab code-generator version from go.sum.
-CODEGEN_VERSION="v0.18.2"
+CODEGEN_VERSION="v0.28.4"
 CODEGEN_PKG=$(echo `go env GOPATH`"/pkg/mod/k8s.io/code-generator@${CODEGEN_VERSION}")
 
 # code-generator does work with go.mod but makes assumptions about
@@ -27,6 +27,7 @@ echo ">> Temporary output directory ${TEMP_DIR}"
 
 # Ensure we can execute.
 chmod +x ${CODEGEN_PKG}/generate-groups.sh
+chmod +x ${CODEGEN_PKG}/generate-internal-groups.sh
 
 ${CODEGEN_PKG}/generate-groups.sh "client" \
     kubesphere.io/fluentbit-operator/api/generated kubesphere.io/fluentbit-operator/api \

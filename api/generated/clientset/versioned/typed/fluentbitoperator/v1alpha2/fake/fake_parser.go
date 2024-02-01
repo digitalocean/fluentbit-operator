@@ -21,7 +21,6 @@ import (
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -34,9 +33,9 @@ type FakeParsers struct {
 	ns   string
 }
 
-var parsersResource = schema.GroupVersionResource{Group: "logging.kubesphere.io", Version: "v1alpha2", Resource: "parsers"}
+var parsersResource = v1alpha2.SchemeGroupVersion.WithResource("parsers")
 
-var parsersKind = schema.GroupVersionKind{Group: "logging.kubesphere.io", Version: "v1alpha2", Kind: "Parser"}
+var parsersKind = v1alpha2.SchemeGroupVersion.WithKind("Parser")
 
 // Get takes name of the parser, and returns the corresponding parser object, and an error if there is any.
 func (c *FakeParsers) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha2.Parser, err error) {
@@ -103,7 +102,7 @@ func (c *FakeParsers) Update(ctx context.Context, parser *v1alpha2.Parser, opts 
 // Delete takes name of the parser and deletes it. Returns an error if one occurs.
 func (c *FakeParsers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(parsersResource, c.ns, name), &v1alpha2.Parser{})
+		Invokes(testing.NewDeleteActionWithOptions(parsersResource, c.ns, name, opts), &v1alpha2.Parser{})
 
 	return err
 }

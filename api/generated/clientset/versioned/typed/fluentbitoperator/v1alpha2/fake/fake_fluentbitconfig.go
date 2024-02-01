@@ -21,7 +21,6 @@ import (
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -34,9 +33,9 @@ type FakeFluentBitConfigs struct {
 	ns   string
 }
 
-var fluentbitconfigsResource = schema.GroupVersionResource{Group: "logging.kubesphere.io", Version: "v1alpha2", Resource: "fluentbitconfigs"}
+var fluentbitconfigsResource = v1alpha2.SchemeGroupVersion.WithResource("fluentbitconfigs")
 
-var fluentbitconfigsKind = schema.GroupVersionKind{Group: "logging.kubesphere.io", Version: "v1alpha2", Kind: "FluentBitConfig"}
+var fluentbitconfigsKind = v1alpha2.SchemeGroupVersion.WithKind("FluentBitConfig")
 
 // Get takes name of the fluentBitConfig, and returns the corresponding fluentBitConfig object, and an error if there is any.
 func (c *FakeFluentBitConfigs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha2.FluentBitConfig, err error) {
@@ -103,7 +102,7 @@ func (c *FakeFluentBitConfigs) Update(ctx context.Context, fluentBitConfig *v1al
 // Delete takes name of the fluentBitConfig and deletes it. Returns an error if one occurs.
 func (c *FakeFluentBitConfigs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(fluentbitconfigsResource, c.ns, name), &v1alpha2.FluentBitConfig{})
+		Invokes(testing.NewDeleteActionWithOptions(fluentbitconfigsResource, c.ns, name, opts), &v1alpha2.FluentBitConfig{})
 
 	return err
 }

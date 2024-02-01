@@ -21,7 +21,6 @@ import (
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -34,9 +33,9 @@ type FakeInputs struct {
 	ns   string
 }
 
-var inputsResource = schema.GroupVersionResource{Group: "logging.kubesphere.io", Version: "v1alpha2", Resource: "inputs"}
+var inputsResource = v1alpha2.SchemeGroupVersion.WithResource("inputs")
 
-var inputsKind = schema.GroupVersionKind{Group: "logging.kubesphere.io", Version: "v1alpha2", Kind: "Input"}
+var inputsKind = v1alpha2.SchemeGroupVersion.WithKind("Input")
 
 // Get takes name of the input, and returns the corresponding input object, and an error if there is any.
 func (c *FakeInputs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha2.Input, err error) {
@@ -103,7 +102,7 @@ func (c *FakeInputs) Update(ctx context.Context, input *v1alpha2.Input, opts v1.
 // Delete takes name of the input and deletes it. Returns an error if one occurs.
 func (c *FakeInputs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(inputsResource, c.ns, name), &v1alpha2.Input{})
+		Invokes(testing.NewDeleteActionWithOptions(inputsResource, c.ns, name, opts), &v1alpha2.Input{})
 
 	return err
 }
