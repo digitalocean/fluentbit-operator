@@ -65,11 +65,10 @@ spec:
                 - app-workload
       containers:
       - env:
-        - name: NODE_NAME
+        - name: NAMESPACE
           valueFrom:
             fieldRef:
-              apiVersion: v1
-              fieldPath: spec.nodeName
+              fieldPath: metadata.namespace
         image: markusthoemmes/fluent-bit:2.2.2-0dacfc2
         imagePullPolicy: Always
         name: fluent-bit

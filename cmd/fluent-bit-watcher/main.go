@@ -14,13 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/klog/v2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -31,15 +31,17 @@ const (
 	parsersFileName = "/fluent-bit/config/parsers.conf"
 )
 
-var scheme = runtime.NewScheme()
-
-func init() {
-	utilruntime.Must(v1alpha2.AddToScheme(scheme))
-}
-
 func main() {
-	// TODO: Make this a flag or pass it via env.
-	ns := "apps-external-log"
+	// TODO: Why does this not work?
+	ctrl.SetLogger(zap.New())
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(v1alpha2.AddToScheme(scheme))
+
+	ns := os.Getenv("NAMESPACE")
+	if ns == "" {
+		log.Fatal("NAMESPACE environment variable must be set")
+	}
 
 	signalCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -76,7 +78,6 @@ func main() {
 	// Create the controller that'll watch for config changes and cause a
 	// config reload.
 	mgr, err := ctrl.NewManager(kubeConfig, ctrl.Options{
-		Logger: klog.NewKlogr(),
 		Scheme: scheme,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{ns: {}},
@@ -237,17 +238,17 @@ func renderMainConfig(
 
 	inputSections, err := inputs.Load(sl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to render input sections: %w", err)
 	}
 
 	filterSections, err := filters.Load(sl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to render filter sections: %w", err)
 	}
 
 	outputSections, err := outputs.Load(sl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to render output sections: %w", err)
 	}
 
 	if inputSections != "" && outputSections == "" {
