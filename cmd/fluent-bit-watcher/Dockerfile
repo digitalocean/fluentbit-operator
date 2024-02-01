@@ -15,8 +15,10 @@ RUN CGO_ENABLED=0 go build -o /tmp/fluent-bit-watcher ./cmd/fluent-bit-watcher/.
 FROM fluent/fluent-bit:${FLUENTBIT_VERSION}
 
 COPY conf/fluent-bit.conf conf/parsers.conf /fluent-bit/etc/
-COPY conf/startup.conf /fluent-bit/config/fluent-bit.conf
 COPY --from=builder /tmp/fluent-bit-watcher /fluent-bit/bin/fluent-bit-watcher
+
+# Force creation of the /fluent-bit/config dir. `mkdir` doesn't work in this base image.
+COPY conf/empty.conf /fluent-bit/config/fluent-bit.conf
 
 # Entry point
 ENTRYPOINT ["/fluent-bit/bin/fluent-bit-watcher"]

@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/pointer"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -191,6 +192,20 @@ func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (
 // regenerateConfigs fetches the current in-cluster state and generates a new
 // main and parsers config.
 func regenerateConfigs(ctx context.Context, apiClient client.Client, ns string) ([]byte, []byte, error) {
+	// TODO: Should we actually fetch the config from the cluster still?
+	cfg := v1alpha2.FluentBitConfig{
+		Spec: v1alpha2.FluentBitConfigSpec{
+			Service: &v1alpha2.Service{
+				Daemon:       pointer.Bool(false),
+				FlushSeconds: pointer.Int64(1),
+				GraceSeconds: pointer.Int64(60),
+				HttpServer:   pointer.Bool(true),
+				LogLevel:     "warning",
+				ParsersFile:  "/fluent-bit/etc/parsers.conf",
+			},
+		},
+	}
+
 	var inputs v1alpha2.InputList
 	if err := apiClient.List(ctx, &inputs, client.InNamespace(ns)); err != nil {
 		return nil, nil, fmt.Errorf("failed to list inputs: %w", err)
@@ -215,62 +230,17 @@ func regenerateConfigs(ctx context.Context, apiClient client.Client, ns string) 
 	// We keep it in the call anyway to facilitate some level of compatibility to the
 	// upstream CRD code.
 	sl := plugins.NewSecretLoader(apiClient, ns)
-	mainConfig, err := renderMainConfig(sl, inputs, filters, outputs)
+	mainConfig, err := cfg.RenderMainConfig(sl, inputs, filters, outputs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render main config: %w", err)
 	}
 
-	parserSections, err := parsers.Load(sl)
+	parserConfig, err := cfg.RenderParserConfig(sl, parsers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render parser config: %w", err)
 	}
 
-	return mainConfig, []byte(parserSections), nil
-}
-
-// renderMainConfig renders the main fluent-bit config from inputs, filters and outputs.
-func renderMainConfig(
-	sl plugins.SecretLoader,
-	inputs v1alpha2.InputList,
-	filters v1alpha2.FilterList,
-	outputs v1alpha2.OutputList,
-) ([]byte, error) {
-	var buf bytes.Buffer
-
-	inputSections, err := inputs.Load(sl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render input sections: %w", err)
-	}
-
-	filterSections, err := filters.Load(sl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render filter sections: %w", err)
-	}
-
-	outputSections, err := outputs.Load(sl)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render output sections: %w", err)
-	}
-
-	if inputSections != "" && outputSections == "" {
-		outputSections = `[Output]
-    Name    null
-    Match   *`
-	}
-
-	buf.WriteString(`[Service]
-    Daemon    false
-    Flush    1
-    Grace    60
-    Http_Server    true
-    Log_Level    warning
-    Parsers_File    /fluent-bit/etc/parsers.conf
-`)
-	buf.WriteString(inputSections)
-	buf.WriteString(filterSections)
-	buf.WriteString(outputSections)
-
-	return buf.Bytes(), nil
+	return []byte(mainConfig), []byte(parserConfig), nil
 }
 
 // overrideFile creates or truncates the file at the given name and writes the given content to it.
