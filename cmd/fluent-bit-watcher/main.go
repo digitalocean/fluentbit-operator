@@ -109,6 +109,7 @@ func main() {
 			fluentbitProcess: cmd,
 			apiClient:        mgr.GetClient(),
 			namespace:        ns,
+			configName:       configName,
 			lastMainConfig:   mainConfig,
 			lastParserConfig: parserConfig,
 		}); err != nil {
