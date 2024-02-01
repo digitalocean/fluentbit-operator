@@ -25,14 +25,14 @@ endif
 
 .PHONY: image-fluentbit
 image-fluentbit:
-	docker build --platform linux/amd64 --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-bit-watcher/Dockerfile -t markusthoemmes/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
+	docker build --platform linux/amd64 --build-arg FLUENTBIT_VERSION=$(FB_VERSION) -f cmd/fluent-bit-watcher/Dockerfile -t digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) .
 ifdef latest
-	docker tag markusthoemmes/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) markusthoemmes/fluent-bit:latest
+	docker tag digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG) digitaloceanapps/fluent-bit:latest
 endif
 
 .PHONY: image-push-fluentbit
 image-push-fluentbit: image-fluentbit
-	docker push markusthoemmes/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG)
+	docker push digitaloceanapps/fluent-bit:$(FB_VERSION)-$(IMAGE_TAG)
 ifdef latest
-	docker push markusthoemmes/fluent-bit:latest
+	docker push digitaloceanapps/fluent-bit:latest
 endif
