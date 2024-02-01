@@ -19,6 +19,7 @@ rules:
   - outputs
   - parsers
   verbs:
+  - get
   - list
   - watch
 ---
@@ -66,6 +67,8 @@ spec:
                 - app-workload
       containers:
       - env:
+        - name: CONFIG_NAME
+          value: apps-external-log-fluent-bit-config
         - name: NAMESPACE
           valueFrom:
             fieldRef:

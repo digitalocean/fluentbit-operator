@@ -12,10 +12,11 @@ import (
 	"syscall"
 
 	"golang.org/x/sync/errgroup"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/pointer"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,6 +45,11 @@ func main() {
 		log.Fatal("NAMESPACE environment variable must be set")
 	}
 
+	configName := os.Getenv("CONFIG_NAME")
+	if configName == "" {
+		log.Fatal("CONFIG_NAME environment variable must be set")
+	}
+
 	signalCtx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -57,7 +63,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create non-cached client: %v", err)
 	}
-	mainConfig, parserConfig, err := regenerateConfigs(signalCtx, nonCachedClient, ns)
+	mainConfig, parserConfig, err := regenerateConfigs(signalCtx, nonCachedClient, ns, configName)
 	if err != nil {
 		log.Fatalf("Failed to generate initial config: %v", err)
 	}
@@ -94,6 +100,7 @@ func main() {
 	})
 	if err := ctrl.NewControllerManagedBy(mgr).
 		Named("config").
+		Watches(&v1alpha2.FluentBitConfig{}, singletonEnqueue).
 		Watches(&v1alpha2.Input{}, singletonEnqueue).
 		Watches(&v1alpha2.Filter{}, singletonEnqueue).
 		Watches(&v1alpha2.Output{}, singletonEnqueue).
@@ -148,6 +155,7 @@ type configReconciler struct {
 	fluentbitProcess *exec.Cmd
 	apiClient        client.Client
 	namespace        string
+	configName       string
 
 	lastMainConfig   []byte
 	lastParserConfig []byte
@@ -156,7 +164,7 @@ type configReconciler struct {
 func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
 	log.Print("Reconciling configuration")
 
-	mainConfig, parserConfig, err := regenerateConfigs(ctx, r.apiClient, r.namespace)
+	mainConfig, parserConfig, err := regenerateConfigs(ctx, r.apiClient, r.namespace, r.configName)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to regenerate configs: %w", err)
 	}
@@ -191,38 +199,45 @@ func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (
 
 // regenerateConfigs fetches the current in-cluster state and generates a new
 // main and parsers config.
-func regenerateConfigs(ctx context.Context, apiClient client.Client, ns string) ([]byte, []byte, error) {
-	// TODO: Should we actually fetch the config from the cluster still?
-	cfg := v1alpha2.FluentBitConfig{
-		Spec: v1alpha2.FluentBitConfigSpec{
-			Service: &v1alpha2.Service{
-				Daemon:       pointer.Bool(false),
-				FlushSeconds: pointer.Int64(1),
-				GraceSeconds: pointer.Int64(60),
-				HttpServer:   pointer.Bool(true),
-				LogLevel:     "warning",
-				ParsersFile:  "/fluent-bit/etc/parsers.conf",
-			},
-		},
+func regenerateConfigs(ctx context.Context, apiClient client.Client, ns string, configName string) ([]byte, []byte, error) {
+	var cfg v1alpha2.FluentBitConfig
+	if err := apiClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: configName}, &cfg); err != nil {
+		return nil, nil, fmt.Errorf("failed to get config: %w", err)
 	}
 
 	var inputs v1alpha2.InputList
-	if err := apiClient.List(ctx, &inputs, client.InNamespace(ns)); err != nil {
+	selector, err := metav1.LabelSelectorAsSelector(&cfg.Spec.InputSelector)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform input selector: %w", err)
+	}
+	if err := apiClient.List(ctx, &inputs, client.InNamespace(ns), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list inputs: %w", err)
 	}
 
 	var filters v1alpha2.FilterList
-	if err := apiClient.List(ctx, &filters, client.InNamespace(ns)); err != nil {
+	selector, err = metav1.LabelSelectorAsSelector(&cfg.Spec.FilterSelector)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform filter selector: %w", err)
+	}
+	if err := apiClient.List(ctx, &filters, client.InNamespace(ns), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list filters: %w", err)
 	}
 
 	var outputs v1alpha2.OutputList
-	if err := apiClient.List(ctx, &outputs, client.InNamespace(ns)); err != nil {
+	selector, err = metav1.LabelSelectorAsSelector(&cfg.Spec.OutputSelector)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform output selector: %w", err)
+	}
+	if err := apiClient.List(ctx, &outputs, client.InNamespace(ns), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list outputs: %w", err)
 	}
 
 	var parsers v1alpha2.ParserList
-	if err := apiClient.List(ctx, &parsers, client.InNamespace(ns)); err != nil {
+	selector, err = metav1.LabelSelectorAsSelector(&cfg.Spec.ParserSelector)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform output selector: %w", err)
+	}
+	if err := apiClient.List(ctx, &parsers, client.InNamespace(ns), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list parsers: %w", err)
 	}
 
