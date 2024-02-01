@@ -3,11 +3,10 @@ package plugins
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
-	"github.com/go-openapi/errors"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strings"
 )
 
 // +kubebuilder:object:generate:=true
@@ -30,7 +29,7 @@ type SecretLoader struct {
 	namespace string
 }
 
-func NewSecretLoader(c client.Client, ns string, l logr.Logger) SecretLoader {
+func NewSecretLoader(c client.Client, ns string) SecretLoader {
 	return SecretLoader{
 		client:    c,
 		namespace: ns,
@@ -44,7 +43,7 @@ func (sl SecretLoader) LoadSecret(s Secret) (string, error) {
 	}
 
 	if v, ok := secret.Data[s.ValueFrom.SecretKeyRef.Key]; !ok {
-		return "", errors.NotFound(fmt.Sprintf("The key %s is not found.", s.ValueFrom.SecretKeyRef.Key))
+		return "", fmt.Errorf("The key %s is not found.", s.ValueFrom.SecretKeyRef.Key)
 	} else {
 		return strings.TrimSuffix(fmt.Sprintf("%s", v), "\n"), nil
 	}
