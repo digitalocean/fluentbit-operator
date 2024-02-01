@@ -18,8 +18,6 @@ package v1alpha2
 
 type FilterExpansion interface{}
 
-type FluentBitExpansion interface{}
-
 type FluentBitConfigExpansion interface{}
 
 type InputExpansion interface{}

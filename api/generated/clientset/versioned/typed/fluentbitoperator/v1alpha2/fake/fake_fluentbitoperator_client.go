@@ -30,10 +30,6 @@ func (c *FakeLoggingV1alpha2) Filters(namespace string) v1alpha2.FilterInterface
 	return &FakeFilters{c, namespace}
 }
 
-func (c *FakeLoggingV1alpha2) FluentBits(namespace string) v1alpha2.FluentBitInterface {
-	return &FakeFluentBits{c, namespace}
-}
-
 func (c *FakeLoggingV1alpha2) FluentBitConfigs(namespace string) v1alpha2.FluentBitConfigInterface {
 	return &FakeFluentBitConfigs{c, namespace}
 }

@@ -27,7 +27,6 @@ import (
 type LoggingV1alpha2Interface interface {
 	RESTClient() rest.Interface
 	FiltersGetter
-	FluentBitsGetter
 	FluentBitConfigsGetter
 	InputsGetter
 	OutputsGetter
@@ -41,10 +40,6 @@ type LoggingV1alpha2Client struct {
 
 func (c *LoggingV1alpha2Client) Filters(namespace string) FilterInterface {
 	return newFilters(c, namespace)
-}
-
-func (c *LoggingV1alpha2Client) FluentBits(namespace string) FluentBitInterface {
-	return newFluentBits(c, namespace)
 }
 
 func (c *LoggingV1alpha2Client) FluentBitConfigs(namespace string) FluentBitConfigInterface {
