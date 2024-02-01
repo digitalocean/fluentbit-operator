@@ -14,13 +14,14 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/klog/v2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2"
 	"kubesphere.io/fluentbit-operator/api/fluentbitoperator/v1alpha2/plugins"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -32,8 +33,7 @@ const (
 )
 
 func main() {
-	// TODO: Why does this not work?
-	ctrl.SetLogger(zap.New())
+	ctrl.SetLogger(klog.NewKlogr())
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(v1alpha2.AddToScheme(scheme))
@@ -82,6 +82,7 @@ func main() {
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{ns: {}},
 		},
+		Metrics: server.Options{BindAddress: "0"},
 	})
 	if err != nil {
 		log.Fatalf("Failed to create new manager: %v", err)
