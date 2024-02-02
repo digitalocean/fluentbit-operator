@@ -174,7 +174,7 @@ func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (
 		return ctrl.Result{}, fmt.Errorf("failed to override parser file: %w", err)
 	}
 
-	if err := reload(r.fluentbitProcess); err != nil {
+	if err := reload(ctx, r.fluentbitProcess); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to signal fluent-bit process: %w", err)
 	}
 	return reconcile.Result{}, nil
@@ -259,8 +259,8 @@ func overrideFile(fileName string, content []byte) error {
 // count first, then causes the actual reload and then polls the process until it reports that the
 // respective reload has finished.
 // Must not be called concurrently.
-func reload(process *exec.Cmd) error {
-	current, err := getReloads()
+func reload(ctx context.Context, process *exec.Cmd) error {
+	current, err := getReloads(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get initial reload count: %w", err)
 	}
@@ -269,7 +269,7 @@ func reload(process *exec.Cmd) error {
 	}
 	time.Sleep(1 * time.Second)
 	for {
-		updated, err := getReloads()
+		updated, err := getReloads(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get updated reload count: %w", err)
 		}
@@ -283,8 +283,16 @@ func reload(process *exec.Cmd) error {
 }
 
 // getReloads gets the reload count of the running process.
-func getReloads() (int, error) {
-	res, err := http.Get("http://0.0.0.0:2020/api/v2/reload")
+func getReloads(ctx context.Context) (int, error) {
+	// We need to timeout these requests as they seem to get blackholed when the process is reloaded.
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://0.0.0.0:2020/api/v2/reload", nil)
+	if err != nil {
+		return -1, fmt.Errorf("failed to create request: %w", err)
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return -1, fmt.Errorf("failed to get reload state: %w", err)
 	}
