@@ -1,15 +1,17 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -110,8 +112,6 @@ func main() {
 			apiClient:        mgr.GetClient(),
 			namespace:        ns,
 			configName:       configName,
-			lastMainConfig:   mainConfig,
-			lastParserConfig: parserConfig,
 		}); err != nil {
 		log.Fatalf("Failed to create controller: %v", err)
 	}
@@ -157,9 +157,6 @@ type configReconciler struct {
 	apiClient        client.Client
 	namespace        string
 	configName       string
-
-	lastMainConfig   []byte
-	lastParserConfig []byte
 }
 
 func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (reconcile.Result, error) {
@@ -170,29 +167,14 @@ func (r *configReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (
 		return ctrl.Result{}, fmt.Errorf("failed to regenerate configs: %w", err)
 	}
 
-	var changed bool
-	if !bytes.Equal(mainConfig, r.lastMainConfig) {
-		if err := overrideFile(configFileName, mainConfig); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to override config file: %w", err)
-		}
-		changed = true
-		r.lastMainConfig = mainConfig
+	if err := overrideFile(configFileName, mainConfig); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to override config file: %w", err)
 	}
-	if !bytes.Equal(parserConfig, r.lastParserConfig) {
-		if err := overrideFile(parsersFileName, parserConfig); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to override parser file: %w", err)
-		}
-		changed = true
-		r.lastParserConfig = parserConfig
+	if err := overrideFile(parsersFileName, parserConfig); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to override parser file: %w", err)
 	}
 
-	if !changed {
-		log.Print("No changes to the config files")
-		return reconcile.Result{}, nil
-	}
-
-	log.Print("Reloading fluent-bit config")
-	if err := r.fluentbitProcess.Process.Signal(syscall.SIGHUP); err != nil {
+	if err := reload(r.fluentbitProcess); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to signal fluent-bit process: %w", err)
 	}
 	return reconcile.Result{}, nil
@@ -271,4 +253,48 @@ func overrideFile(fileName string, content []byte) error {
 		return fmt.Errorf("failed to write content to file: %w", err)
 	}
 	return nil
+}
+
+// reload reloads the given fluent-bit process in a consistent way. It fetches the current reload
+// count first, then causes the actual reload and then polls the process until it reports that the
+// respective reload has finished.
+// Must not be called concurrently.
+func reload(process *exec.Cmd) error {
+	current, err := getReloads()
+	if err != nil {
+		return fmt.Errorf("failed to get initial reload count: %w", err)
+	}
+	if err := process.Process.Signal(syscall.SIGHUP); err != nil {
+		return fmt.Errorf("failed to signal fluent-bit process: %w", err)
+	}
+	time.Sleep(1 * time.Second)
+	for {
+		updated, err := getReloads()
+		if err != nil {
+			return fmt.Errorf("failed to get updated reload count: %w", err)
+		}
+		if updated == current {
+			log.Printf("Current reloads %d have not been updated yet. Retrying.", current)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		return nil
+	}
+}
+
+// getReloads gets the reload count of the running process.
+func getReloads() (int, error) {
+	res, err := http.Get("http://0.0.0.0:2020/api/v2/reload")
+	if err != nil {
+		return -1, fmt.Errorf("failed to get reload state: %w", err)
+	}
+	defer res.Body.Close()
+
+	var state struct {
+		HotReloadCount int `json:"hot_reload_count"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&state); err != nil {
+		return -1, fmt.Errorf("failed to parse reload state: %w", err)
+	}
+	return state.HotReloadCount, nil
 }

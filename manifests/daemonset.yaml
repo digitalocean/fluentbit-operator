@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: new-fluentbit
+  name: apps-external-log-fluent-bit
   namespace: apps-external-log
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name:  new-fluentbit
+  name:  apps-external-log-fluent-bit
   namespace: apps-external-log
 rules:
 - apiGroups:
@@ -26,34 +26,34 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name:  new-fluentbit
+  name:  apps-external-log-fluent-bit
   namespace: apps-external-log
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: new-fluentbit
+  name: apps-external-log-fluent-bit
 subjects:
 - kind: ServiceAccount
-  name: new-fluentbit
+  name: apps-external-log-fluent-bit
   namespace: apps-external-log
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: new-fluentbit
+  name: apps-external-log-fluent-bit
   namespace: apps-external-log
 spec:
   selector:
     matchLabels:
-      app: new-fluentbit
+      app: apps-external-log-fluent-bit
       apps-infra: "true"
   template:
     metadata:
       creationTimestamp: null
       labels:
-        app: new-fluentbit
+        app: apps-external-log-fluent-bit
         apps-infra: "true"
-      name: new-fluentbit
+      name: apps-external-log-fluent-bit
       namespace: apps-external-log
     spec:
       affinity:
@@ -73,7 +73,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: markusthoemmes/fluent-bit:2.2.2-8bac617
+        image: markusthoemmes/fluent-bit:2.2.2-6186df0
         imagePullPolicy: Always
         name: fluent-bit
         ports:
@@ -95,7 +95,7 @@ spec:
           name: positions
       priorityClassName: system-cluster-critical
       runtimeClassName: gvisor-ptrace-vfs2
-      serviceAccountName: new-fluentbit
+      serviceAccountName: apps-external-log-fluent-bit
       tolerations:
       - effect: NoExecute
         key: apps.digitalocean.com/dedicate
